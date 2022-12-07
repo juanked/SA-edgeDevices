@@ -10,6 +10,11 @@
 #include <xxtea-lib.h>
 #include <Adafruit_AHTX0.h>
 
+// ESP32 deep-sleep defines
+#define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP 3        /* Time ESP32 will go to sleep (in seconds) */
+
+RTC_DATA_ATTR int bootCount = 0;
 char *uid;
 char *message;
 SSD1306 display(0x3c, 21, 22);
@@ -17,7 +22,7 @@ String rssi = "RSSI --";
 String packSize = "--";
 String packet;
 
-TinyGPSPlus gps;
+RTC_DATA_ATTR TinyGPSPlus gps;
 HardwareSerial GPS(1);
 AXP20X_Class axp;
 Adafruit_AHTX0 aht;
@@ -55,15 +60,14 @@ void setup()
   uid = getUID();
 
   xxtea.setKey(key);
-  startGPS();
+  if (bootCount % 4 == 0)
+  {
+    startGPS();
+    smartDelay(5000);
+    if (millis() > 5000 && gps.charsProcessed() < 10)
+      Serial.println(F("No GPS data received: check wiring"));
+  }
   startAirSensor();
-}
-
-void loop()
-{
-  smartDelay(5000);
-  if (millis() > 5000 && gps.charsProcessed() < 10)
-    Serial.println(F("No GPS data received: check wiring"));
 
   measure();
   char *cryptMessage = setSensorsMessage();
@@ -71,7 +75,13 @@ void loop()
   char *message = setMessage(cryptMessage);
   while (!sendLoRaPacket(message))
     ;
-  delay(10000);
+
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  esp_deep_sleep_start();
+}
+
+void loop()
+{
 }
 
 char *getUID()

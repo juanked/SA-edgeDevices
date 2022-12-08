@@ -12,9 +12,9 @@
 
 // ESP32 deep-sleep defines
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP 3        /* Time ESP32 will go to sleep (in seconds) */
+#define mS_TO_S_FACTOR 1000    /* Conversion factor for mili seconds to seconds */
+#define TIME_TO_SLEEP 600       /* Time ESP32 will go to sleep (in seconds) */
 
-RTC_DATA_ATTR int bootCount = 0;
 char *uid;
 char *message;
 SSD1306 display(0x3c, 21, 22);
@@ -22,7 +22,13 @@ String rssi = "RSSI --";
 String packSize = "--";
 String packet;
 
+RTC_DATA_ATTR double locationLat;
+RTC_DATA_ATTR double locationLng;
+RTC_DATA_ATTR double locationAltitude;
+RTC_DATA_ATTR int locationSatellites;
+RTC_DATA_ATTR int bootCount = 0;
 RTC_DATA_ATTR TinyGPSPlus gps;
+
 HardwareSerial GPS(1);
 AXP20X_Class axp;
 Adafruit_AHTX0 aht;
@@ -36,7 +42,9 @@ char *getUID();
 char *getMACPwd();
 char *setSensorsMessage();
 char *setMessage(char *cryptMessage);
+void startAXP();
 void startGPS();
+void stopGPS();
 void startAirSensor();
 void measure();
 int sendLoRaPacket(char *message);
@@ -47,7 +55,7 @@ void setup()
   Serial.begin(115200);
   while (!Serial)
     ;
-
+  Serial.printf("Hello, counter = %i\n", bootCount);
   SPI.begin(SCK, MISO, MOSI, SS);
   LoRa.setPins(SS, RST, DI0);
   if (!LoRa.begin(BAND))
@@ -60,12 +68,14 @@ void setup()
   uid = getUID();
 
   xxtea.setKey(key);
+  startAXP();
   if (bootCount % 4 == 0)
   {
     startGPS();
-    smartDelay(5000);
+    smartDelay(60 * mS_TO_S_FACTOR);
     if (millis() > 5000 && gps.charsProcessed() < 10)
       Serial.println(F("No GPS data received: check wiring"));
+    stopGPS();
   }
   startAirSensor();
 
@@ -73,9 +83,13 @@ void setup()
   char *cryptMessage = setSensorsMessage();
   Serial.println(cryptMessage);
   char *message = setMessage(cryptMessage);
-  while (!sendLoRaPacket(message))
-    ;
-
+  for (int i = 0; i < 2; i++){
+    while (!sendLoRaPacket(message))
+      ;
+    delay(3000);
+  }
+  bootCount++;
+  Serial.println("Going to sleep...");
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   esp_deep_sleep_start();
 }
@@ -99,10 +113,6 @@ char *setSensorsMessage()
   char message[255];
   bool batteryConnect = axp.isBatteryConnect();
   float batteryVoltage = axp.getBattVoltage() / 1000;
-  double locationLat = gps.location.lat();
-  double locationLng = gps.location.lng();
-  double locationAltitude = gps.altitude.meters();
-  int locationSatellites = gps.satellites.value();
   float airTemperature = tempAir.temperature;
   float airHumidity = humidityAir.relative_humidity;
 
@@ -128,7 +138,7 @@ char *setMessage(char *cryptMessage)
   return strdup(message);
 }
 
-void startGPS()
+void startAXP()
 {
   Wire.begin(21, 22);
   if (!axp.begin(Wire, AXP192_SLAVE_ADDRESS))
@@ -139,12 +149,22 @@ void startGPS()
   {
     Serial.println("AXP192 Begin FAIL");
   }
-  axp.setPowerOutPut(AXP192_LDO2, AXP202_ON);
-  axp.setPowerOutPut(AXP192_LDO3, AXP202_ON);
-  axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON);
-  axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON);
-  axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON);
+  axp.setPowerOutPut(AXP192_LDO2, AXP202_ON);  // LoRa
+  axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON); // Unknown
+  axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON); // Unknown
+  axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON); // OLED
+}
+
+void startGPS()
+{
+  axp.setPowerOutPut(AXP192_LDO3, AXP202_ON); // GPS
   GPS.begin(9600, SERIAL_8N1, 34, 12);
+  Serial.println("GPS started");
+}
+void stopGPS()
+{
+  axp.setPowerOutPut(AXP192_LDO3, AXP202_OFF);
+  Serial.println("GPS stopped");
 }
 
 void startAirSensor()
@@ -181,4 +201,8 @@ static void smartDelay(unsigned long ms)
     while (GPS.available())
       gps.encode(GPS.read());
   } while (millis() - start < ms);
+  locationLat = gps.location.lat();
+  locationLng = gps.location.lng();
+  locationAltitude = gps.altitude.meters();
+  locationSatellites = gps.satellites.value();
 }

@@ -14,6 +14,12 @@
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
 #define mS_TO_S_FACTOR 1000    /* Conversion factor for mili seconds to seconds */
 #define TIME_TO_SLEEP 600       /* Time ESP32 will go to sleep (in seconds) */
+#define SEARCH_GPS_TIME 60
+#define PERIOD_ACTIVATION_GPS 10
+
+#define SOIL_PIN 36 // ESP32 pin GPIO36 (ADC0-VP) that connects to AOUT pin of soil moisture sensor
+#define LEAF_PIN 25 // ESP32 pin GPIO15  that connects to BOUT pin of leaf moisture sensor
+#define POWEROUT_PIN 2  // ESP32 pin GPIO2 that powers the leaf moisture sensor
 
 char *uid;
 char *message;
@@ -55,6 +61,11 @@ void setup()
   Serial.begin(115200);
   while (!Serial)
     ;
+  
+  pinMode(SOIL_PIN, INPUT);
+  pinMode(LEAF_PIN, INPUT);
+  pinMode(POWEROUT_PIN, OUTPUT);
+
   Serial.printf("Hello, counter = %i\n", bootCount);
   SPI.begin(SCK, MISO, MOSI, SS);
   LoRa.setPins(SS, RST, DI0);
@@ -69,10 +80,10 @@ void setup()
 
   xxtea.setKey(key);
   startAXP();
-  if (bootCount % 4 == 0)
+  if (bootCount % PERIOD_ACTIVATION_GPS == 0)
   {
     startGPS();
-    smartDelay(60 * mS_TO_S_FACTOR);
+    smartDelay(SEARCH_GPS_TIME * mS_TO_S_FACTOR);
     if (millis() > 5000 && gps.charsProcessed() < 10)
       Serial.println(F("No GPS data received: check wiring"));
     stopGPS();
@@ -181,9 +192,11 @@ void startAirSensor()
 void measure()
 {
   aht.getEvent(&humidityAir, &tempAir);
-  soilMoisture = analogRead(AOUT_PIN);
-  leafMoisture = analogRead(AOUT_PIN);
-  // TODO: actualizar al recibir el sensor
+  soilMoisture = analogRead(SOIL_PIN);
+  digitalWrite(POWEROUT_PIN, HIGH);
+  delay(500);
+  leafMoisture = !digitalRead(LEAF_PIN);
+  digitalWrite(POWEROUT_PIN, LOW);
 }
 
 int sendLoRaPacket(char *message)

@@ -6,27 +6,21 @@
 #include "SSD1306.h"
 #include <TinyGPS++.h>
 #include <axp20x.h>
-#include <ArduinoJson.h>
 #include <xxtea-lib.h>
 #include <Adafruit_AHTX0.h>
 
 // ESP32 deep-sleep defines
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
 #define mS_TO_S_FACTOR 1000    /* Conversion factor for mili seconds to seconds */
-#define TIME_TO_SLEEP 600       /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP 600       /* Time ESP32 will go to sleep (in seconds) Wake each 10min*/
 #define SEARCH_GPS_TIME 60
-#define PERIOD_ACTIVATION_GPS 10
+#define PERIOD_ACTIVATION_GPS 36 // 4 times per day
 
 #define SOIL_PIN 36 // ESP32 pin GPIO36 (ADC0-VP) that connects to AOUT pin of soil moisture sensor
 #define LEAF_PIN 25 // ESP32 pin GPIO15  that connects to BOUT pin of leaf moisture sensor
 #define POWEROUT_PIN 2  // ESP32 pin GPIO2 that powers the leaf moisture sensor
 
 char *uid;
-char *message;
-SSD1306 display(0x3c, 21, 22);
-String rssi = "RSSI --";
-String packSize = "--";
-String packet;
 
 RTC_DATA_ATTR double locationLat;
 RTC_DATA_ATTR double locationLng;

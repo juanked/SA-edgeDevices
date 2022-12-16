@@ -6,8 +6,8 @@
 
 #include <Arduino.h>
 #include "SSD1306.h"
-#define AOUT_PIN 36 // ESP32 pin GPIO36 (ADC0-VP) that connects to AOUT pin of moisture sensor
-#define BOUT_PIN 15 // ESP32 pin GPIO15 (ADC13)
+#define AOUT_PIN 36 // ESP4 pin GPIO36 (ADC0-VP) that connects to AOUT pin of moisture sensor
+#define BOUT_PIN 25 // ESP4 pin GPIO25 (ADC13)
 #define ITERATIONS 10
 
 SSD1306 display(0x3c, 21, 22);
@@ -20,6 +20,9 @@ void macTest();
 void setup()
 {
   pinMode(16, OUTPUT);
+  pinMode(2, OUTPUT);
+  pinMode(AOUT_PIN, INPUT);
+  pinMode(BOUT_PIN, INPUT);
   pinMode(2, OUTPUT);
 
   digitalWrite(16, LOW); // set GPIO16 low to reset OLED
@@ -46,14 +49,18 @@ void setup()
 
 void loop()
 {
+  digitalWrite(2, HIGH);
+  delay(500);
   int soilMoisture = analogRead(AOUT_PIN);
-  int leafMoisture = analogRead(BOUT_PIN);
+  int leafMoisture = !digitalRead(BOUT_PIN);
+  digitalWrite(2, LOW);
   Serial.println(counter);
+  String isWet = leafMoisture ? "true" : "false";
   Serial.printf("Soil Moisture measure = %i\n", soilMoisture);
-  Serial.printf("Leaf Moisture measure = %i\n", leafMoisture);
+  Serial.println("Leaf Moisture measure = " + isWet);
   Serial.println("--------------");
   soilTotal += soilMoisture;
-  leafTotal += leafMoisture;
+
 
   display.clear();
   display.setTextAlignment(TEXT_ALIGN_LEFT);
@@ -62,7 +69,7 @@ void loop()
   display.drawString(0, 0, "Soil: ");
   display.drawString(90, 0, String(soilMoisture));
   display.drawString(0, 20, "Leaf: ");
-  display.drawString(90, 20, String(leafMoisture));
+  display.drawString(90, 20, String(isWet));
   display.drawString(0, 40, "Counter: ");
   display.drawString(90, 40, String(counter));
   display.display();
@@ -73,7 +80,6 @@ void loop()
     counter = 0;
     Serial.printf("s:%i;l:%i\n", soilTotal, leafTotal);
     int soilAverage = soilTotal / ITERATIONS;
-    int leafAverage = leafTotal / ITERATIONS;
     display.clear();
     display.setTextAlignment(TEXT_ALIGN_LEFT);
     display.setFont(ArialMT_Plain_24);
@@ -88,11 +94,8 @@ void loop()
 
     display.drawString(0, 0, "Soil av: ");
     display.drawString(90, 0, String(soilAverage));
-    display.drawString(0, 26, "Leaf av: ");
-    display.drawString(90, 26, String(leafAverage));
     display.display();
     Serial.printf("Soil average: %i\n", soilAverage);
-    Serial.printf("Leaf average: %i\n", leafAverage);
     Serial.println("--------------");
     soilTotal = 0;
     leafTotal = 0;

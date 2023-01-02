@@ -3,7 +3,6 @@
 #include <SPI.h>
 #include <LoRa.h>
 #include <Wire.h>
-#include "SSD1306.h"
 #include <TinyGPS++.h>
 #include <axp20x.h>
 #include <xxtea-lib.h>
@@ -12,13 +11,13 @@
 // ESP32 deep-sleep defines
 #define uS_TO_S_FACTOR 1000000 /* Conversion factor for micro seconds to seconds */
 #define mS_TO_S_FACTOR 1000    /* Conversion factor for mili seconds to seconds */
-#define TIME_TO_SLEEP 600       /* Time ESP32 will go to sleep (in seconds) Wake each 10min*/
+#define TIME_TO_SLEEP 600      /* Time ESP32 will go to sleep (in seconds) Wake each 10min*/
 #define SEARCH_GPS_TIME 60
-#define PERIOD_ACTIVATION_GPS 36 // 4 times per day
+#define PERIOD_ACTIVATION_GPS 72 // 2 times per day
 
-#define SOIL_PIN 36 // ESP32 pin GPIO36 (ADC0-VP) that connects to AOUT pin of soil moisture sensor
-#define LEAF_PIN 25 // ESP32 pin GPIO15  that connects to BOUT pin of leaf moisture sensor
-#define POWEROUT_PIN 2  // ESP32 pin GPIO2 that powers the leaf moisture sensor
+#define SOIL_PIN 36    // ESP32 pin GPIO36 (ADC0-VP) that connects to AOUT pin of soil moisture sensor
+#define LEAF_PIN 25    // ESP32 pin GPIO15  that connects to BOUT pin of leaf moisture sensor
+#define POWEROUT_PIN 2 // ESP32 pin GPIO2 that powers the leaf moisture sensor
 
 char *uid;
 
@@ -43,6 +42,8 @@ char *getMACPwd();
 char *setSensorsMessage();
 char *setMessage(char *cryptMessage);
 void startAXP();
+void startLoRa();
+void stopLoRa();
 void startGPS();
 void stopGPS();
 void startAirSensor();
@@ -55,45 +56,50 @@ void setup()
   Serial.begin(115200);
   while (!Serial)
     ;
-  
+
   pinMode(SOIL_PIN, INPUT);
   pinMode(LEAF_PIN, INPUT);
   pinMode(POWEROUT_PIN, OUTPUT);
 
+  startAXP();
+  startLoRa();
   Serial.printf("Hello, counter = %i\n", bootCount);
-  SPI.begin(SCK, MISO, MOSI, SS);
-  LoRa.setPins(SS, RST, DI0);
-  if (!LoRa.begin(BAND))
-  {
-    Serial.println("Starting LoRa failed!");
-    while (1)
-      ;
-  }
 
   uid = getUID();
-
   xxtea.setKey(key);
-  startAXP();
+
   if (bootCount % PERIOD_ACTIVATION_GPS == 0)
   {
     startGPS();
-    smartDelay(SEARCH_GPS_TIME * mS_TO_S_FACTOR);
+    locationLat = 0;
+    locationLng = 0;
+    int gpsCount = 0;
+    while (gpsCount < 3 && locationLat == 0 && locationLng == 0)
+    {
+      Serial.println("Looking for GPS");
+      smartDelay(SEARCH_GPS_TIME * mS_TO_S_FACTOR);
+      gpsCount++;
+    }
     if (millis() > 5000 && gps.charsProcessed() < 10)
       Serial.println(F("No GPS data received: check wiring"));
     stopGPS();
+    bootCount = 0;
   }
-  startAirSensor();
 
+  startAirSensor();
   measure();
+
   char *cryptMessage = setSensorsMessage();
   Serial.println(cryptMessage);
   char *message = setMessage(cryptMessage);
-  for (int i = 0; i < 2; i++){
+  for (int i = 0; i < 2; i++)
+  {
     while (!sendLoRaPacket(message))
       ;
     delay(3000);
   }
   bootCount++;
+  stopLoRa();
   Serial.println("Going to sleep...");
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   esp_deep_sleep_start();
@@ -154,10 +160,27 @@ void startAXP()
   {
     Serial.println("AXP192 Begin FAIL");
   }
-  axp.setPowerOutPut(AXP192_LDO2, AXP202_ON);  // LoRa
   axp.setPowerOutPut(AXP192_DCDC2, AXP202_ON); // Unknown
   axp.setPowerOutPut(AXP192_EXTEN, AXP202_ON); // Unknown
   axp.setPowerOutPut(AXP192_DCDC1, AXP202_ON); // OLED
+}
+
+void startLoRa()
+{
+  axp.setPowerOutPut(AXP192_LDO2, AXP202_ON); // LoRa
+  SPI.begin(SCK, MISO, MOSI, SS);
+  LoRa.setPins(SS, RST, DI0);
+  if (!LoRa.begin(BAND))
+  {
+    Serial.println("Starting LoRa failed!");
+    while (1)
+      ;
+  }
+}
+
+void stopLoRa()
+{
+  axp.setPowerOutPut(AXP192_LDO2, AXP202_OFF); // LoRa
 }
 
 void startGPS()

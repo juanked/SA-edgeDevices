@@ -30,7 +30,6 @@ void cbk(int packetSize);
 bool checkUID(String message);
 void getMessage();
 void water();
-int counter = 0;
 
 void setup()
 {
@@ -69,16 +68,9 @@ void loop()
     return;
   }
 
-  // Serial.println(message);
   getMessage();
   water();
-  // if (counter%2 == 0)
-  //   watering = 0;
-  // else
-  //   watering = 1;
 
-  // water();
-  // counter++;
   delay(1000);
 }
 
@@ -123,7 +115,6 @@ bool checkUID(String message)
       return true;
     }
   }
-  // Serial.println("uid no coincide");
   return false;
 }
 
@@ -150,19 +141,10 @@ void getMessage()
       Serial.print("sin ␄: ");
       Serial.println(substring);
     }
-    // DeserializationError result = deserializeJson(doc, substring);
-    // if (result)
-    // {
-    //   Serial.print(F("deserializeJson() failed: "));
-    //   Serial.println(result.c_str());
-    // }
-    // if (result.Ok)
-    // {
     deserializeJson(doc, substring);
     watering = doc["water"].as<String>().toInt();
     Serial.print("bool water: ");
     Serial.println(watering);
-    // }
   }
 }
 

@@ -38,7 +38,6 @@ int leafMoisture;
 String key = F("smartAgriculture");
 
 char *getUID();
-char *getMACPwd();
 char *setSensorsMessage();
 char *setMessage(char *cryptMessage);
 void startAXP();
